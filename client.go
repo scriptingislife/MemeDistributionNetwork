@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"golang.org/x/net/html"
 )
 
 // DownloadFileFromURL ...
@@ -49,11 +52,58 @@ func OpenFile(filepath string) error {
 }
 
 func main() {
-	ip := "<ip>:<port>" // CHANGE ME
+
+	host := "<serv-ip>:8000" // CHANGE ME
+	dir := "popups"          // "popups" or "memes"
+
+	// Seed our random number generator
 	rand.Seed(time.Now().UnixNano())
-	num := rand.Intn(32)
-	filename := fmt.Sprintf("%d.jpg", num)
-	fileURL := fmt.Sprintf("http://%s/memes/%s", ip, filename)
+
+	resp, _ := http.Get(fmt.Sprintf("http://%s/%s/", host, dir))
+
+	tokenizer := html.NewTokenizer(resp.Body)
+
+	files := make([]string, 0)
+
+	// https://drstearns.github.io/tutorials/tokenizing/
+	for {
+		//get the next token type
+		tokenType := tokenizer.Next()
+
+		//if it's an error token, we either reached
+		//the end of the file, or the HTML was malformed
+		if tokenType == html.ErrorToken {
+			err := tokenizer.Err()
+			if err == io.EOF {
+				//end of the file, break out of the loop
+				break
+			}
+			//otherwise, there was an error tokenizing,
+			//which likely means the HTML was malformed.
+			//since this is a simple command-line utility,
+			//we can just use log.Fatalf() to report the error
+			//and exit the process with a non-zero status code
+			log.Fatalf("error tokenizing HTML: %v", tokenizer.Err())
+		}
+
+		//process the token according to the token type...
+		if tokenType == html.StartTagToken {
+			t := tokenizer.Token()
+			if t.Data == "a" {
+				for _, a := range t.Attr {
+					if a.Key == "href" {
+						files = append(files, a.Val)
+						break
+					} // if href
+				} // for attr
+			} // if anchor
+		}
+	}
+
+	resp.Body.Close()
+
+	filename := files[rand.Intn(len(files))]
+	fileURL := fmt.Sprintf("http://%s/%s/%s", host, dir, filename)
 	fmt.Println(fileURL)
 	filepath := filepath.Join(os.TempDir(), filename)
 
