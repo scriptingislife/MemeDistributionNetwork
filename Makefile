@@ -3,4 +3,4 @@ build:
 	GOOS=linux   GOARCH=amd64 go build
 
 serve:
-	cd memes && python3 http.server
+	python3 http.server
